@@ -1,0 +1,19 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "fixr-monitor",
+	"main": "src/index.js",
+	"compatibility_date": "2026-08-15",
+	"observability": {
+		"enabled": true
+	},
+	"upload_source_maps": true,
+	"kv_namespaces": [
+		{
+			"binding": "FIXR_STATE",
+			"id": "cd6a84362a2442439052837bbfaabe0b"
+		}
+	],
+	"triggers": {
+		"crons": ["* * * * *"]
+	}
+}
