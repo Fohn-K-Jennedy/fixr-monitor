@@ -90,57 +90,60 @@ export default {
 };
 
 async function runScheduledCheck(env) {
+	let failed = false;
 	if (!isWithinMonitoringWindow()) {
 		console.log("Skipped FIXR check: outside UK monitoring window.");
-		await reportHeartbeat(env, false);
-		return;
-	}
-
-	try {
-		const result = await checkForEvents(env);
-
-		if (!result.success) {
-			console.error(
-				"Scheduled check reported a failure:",
-				JSON.stringify(result.failed_notifications),
-			);
-
-			await reportHeartbeat(env, true);
-			return;
+	} else {
+		try {
+			const result = await checkForEvents(env);
+			failed = !result.success;
+			console.log(JSON.stringify(result));
+		} catch (error) {
+			failed = true;
+			console.error("Scheduled check failed:", error);
 		}
+	}
+	await reportHeartbeat(env, failed);
+}
 
-		console.log(JSON.stringify(result));
-		await reportHeartbeat(env, false);
-	} catch (error) {
-		console.error("Scheduled check failed:", error);
-		await reportHeartbeat(env, true);
+// Bound both connection and response-body time so a stalled upstream cannot
+// indefinitely postpone the scheduled run's heartbeat.
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		const response = await fetch(url, { ...options, signal: controller.signal });
+		const body = await response.text();
+		return { ok: response.ok, status: response.status, text: async () => body };
+	} finally {
+		clearTimeout(timer);
 	}
 }
 
 async function reportHeartbeat(env, failed) {
 	if (!env.BETTERSTACK_HEARTBEAT_URL) {
-		console.error("Better Stack heartbeat secret is missing.");
-		return;
+		throw new Error("Better Stack heartbeat secret is missing.");
 	}
-
-	const heartbeatUrl = String(
-		env.BETTERSTACK_HEARTBEAT_URL,
-	).replace(/\/+$/, "");
-
-	const targetUrl = failed
-		? `${heartbeatUrl}/fail`
-		: heartbeatUrl;
-
-	try {
-		const response = await fetch(targetUrl);
-
-		if (!response.ok) {
-			console.error(
-				`Better Stack returned status ${response.status}`,
-			);
+	const heartbeatUrl = String(env.BETTERSTACK_HEARTBEAT_URL).trim().replace(/\/+$/, "");
+	const targetUrl = failed ? `${heartbeatUrl}/fail` : heartbeatUrl;
+	for (let attempt = 1; attempt <= 3; attempt += 1) {
+		try {
+			const response = await fetchWithTimeout(targetUrl, {}, 5000);
+			if (!response.ok) {
+				throw new Error(`Better Stack returned status ${response.status}`);
+			}
+			console.log(JSON.stringify({
+				status: "heartbeat_delivered", failed, attempt,
+				checked_at: new Date().toISOString(),
+			}));
+			return;
+		} catch (error) {
+			// Do not log the secret heartbeat URL.
+			console.error(JSON.stringify({ status: "heartbeat_delivery_failed", attempt }));
+			if (attempt === 3) {
+				throw new Error("Could not deliver Better Stack heartbeat after 3 attempts.");
+			}
 		}
-	} catch (error) {
-		console.error("Could not contact Better Stack:", error);
 	}
 }
 
@@ -324,7 +327,7 @@ async function checkForEvents(env) {
 }
 
 async function getCurrentEventUrls() {
-	const response = await fetch(FIXR_URL, {
+	const response = await fetchWithTimeout(FIXR_URL, {
 		headers: {
 			"User-Agent": "FIXR Event Monitor/1.0",
 		},
@@ -425,7 +428,7 @@ function readRecipientDeliveries(savedState) {
 }
 
 async function getEventName(eventUrl) {
-	const response = await fetch(eventUrl, {
+	const response = await fetchWithTimeout(eventUrl, {
 		headers: {
 			"User-Agent": "FIXR Event Monitor/1.0",
 		},
@@ -558,7 +561,7 @@ async function sendWhatsAppAlert(env, recipient, event) {
 		];
 	}
 
-	const response = await fetch(
+	const response = await fetchWithTimeout(
 		`https://graph.facebook.com/${WHATSAPP_API_VERSION}/${env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
 		{
 			method: "POST",
