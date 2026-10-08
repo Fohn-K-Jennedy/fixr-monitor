@@ -30,7 +30,7 @@
     }
   ],
   "vars": {
-    "WHATSAPP_SENDING_ENABLED": "false"
+    "WHATSAPP_SENDING_ENABLED": "true"
   },
   "triggers": {
     "crons": [

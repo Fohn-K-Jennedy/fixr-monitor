@@ -150,7 +150,8 @@ export class NotificationCoordinator {
         await storage.put(LEDGER_KEY, ledger);
         let failure = false;
         try {
-          await sendWhatsAppAlert(this.env, recipients[index], {name:eventName,url:eventUrl});
+          const messageId = await sendWhatsAppAlert(this.env, recipients[index], {name:eventName,url:eventUrl});
+          ledger.deliveries[key].provider_message_id = messageId;
           ledger.deliveries[key].status = "accepted";
           accepted++;
         } catch {
@@ -411,10 +412,14 @@ async function sendWhatsAppAlert(env, recipient, event) {
 	);
 
 	if (!response.ok) {
-		throw new Error(
-			`WhatsApp returned status ${response.status}.`,
-		);
+		throw new Error(`WhatsApp returned status ${response.status}.`);
 	}
+	const receipt = JSON.parse(await response.text());
+	const messageId = receipt?.messages?.[0]?.id;
+	if (typeof messageId !== "string" || !messageId) {
+		throw new Error("WhatsApp acceptance receipt is missing.");
+	}
+	return messageId;
 }
 
 function isWithinMonitoringWindow(date = new Date()) {

@@ -19,7 +19,7 @@ function harness() {
       if(String(url).includes('graph.facebook.com')) {
         posts++;
         if(postFailure)throw Error('Mock network timeout');
-        return {ok:true,status:200,text:async()=>{if(bodyFailure)throw Error('Mock body failure');return '{}';}};
+        return {ok:true,status:200,text:async()=>{if(bodyFailure)throw Error('Mock body failure');return JSON.stringify({messages:[{id:'mock-message-id'}]});}};
       }
       if(invalidListing) return {ok:false,status:503,text:async()=>''};
       return {ok:true,status:200,text:async()=>String(url).includes('/organiser/') ? urls.map(url=>`<a href="${url}">Event</a>`).join('') : '<h1>Mock Event</h1>'};
@@ -54,6 +54,12 @@ test('failed durable claim prevents external send',async()=>{
 });
 test('failed receipt persistence leaves claim blocking resend after restart',async()=>{
   const h=harness();await h.check();h.newEvent();h.failWriteAfter(2);await h.check();h.restart();assert.equal((await h.check()).status,'delivery_review_required');assert.equal(h.posts(),1);
+});
+test('failed event-finalization write does not resend accepted messages',async()=>{
+  const h=harness();await h.check();h.newEvent();h.failWriteAfter(3);await h.check();h.restart();await h.check();assert.equal(h.posts(),1);
+});
+test('six configured recipients each receive one attempt, subsequent runs send none',async()=>{
+  const h=harness();h.env.WHATSAPP_RECIPIENTS=Array.from({length:6},(_,i)=>String(10000000000+i)).join(',');await h.check();h.newEvent();await h.check();h.restart();await h.check();assert.equal(h.posts(),6);
 });
 test('accepted message with unreadable body never retries',async()=>{
   const h=harness();await h.check();h.newEvent();h.bodyFailure();await h.check();h.restart();await h.check();assert.equal(h.posts(),1);assert.equal((await h.health()).whatsapp_sending_enabled,false);
