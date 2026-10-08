@@ -61,6 +61,8 @@ export default {
 		return Response.json({
 			success: true,
 			status: "worker_online",
+			release: "heartbeat-retry-v2",
+			heartbeat_configured: Boolean(String(env.BETTERSTACK_HEARTBEAT_URL || "").trim()),
 			checked_at: new Date().toISOString(),
 			currently_in_window: isWithinMonitoringWindow(),
 		});
