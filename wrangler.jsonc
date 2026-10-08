@@ -1,19 +1,40 @@
 {
-	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "fixr-monitor",
-	"main": "src/index.js",
-	"compatibility_date": "2026-08-15",
-	"observability": {
-		"enabled": true
-	},
-	"upload_source_maps": true,
-	"kv_namespaces": [
-		{
-			"binding": "FIXR_STATE",
-			"id": "cd6a84362a2442439052837bbfaabe0b"
-		}
-	],
-	"triggers": {
-		"crons": []
-	}
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "fixr-monitor",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-15",
+  "observability": {
+    "enabled": true
+  },
+  "upload_source_maps": true,
+  "kv_namespaces": [
+    {
+      "binding": "FIXR_STATE",
+      "id": "cd6a84362a2442439052837bbfaabe0b"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "NOTIFICATION_COORDINATOR",
+        "class_name": "NotificationCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "notification-coordinator-v1",
+      "new_sqlite_classes": [
+        "NotificationCoordinator"
+      ]
+    }
+  ],
+  "vars": {
+    "WHATSAPP_SENDING_ENABLED": "false"
+  },
+  "triggers": {
+    "crons": [
+      "* * * * *"
+    ]
+  }
 }
